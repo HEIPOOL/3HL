@@ -1,0 +1,8 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1200" height="630" fill="#FFF7EE"/>
+  <circle cx="600" cy="280" r="100" fill="#C77B5B" opacity="0.3"/>
+  <circle cx="600" cy="280" r="60" fill="#6EA8A6" opacity="0.5"/>
+  <text x="600" y="300" font-size="48" text-anchor="middle" fill="#382F2A">♥</text>
+  <text x="600" y="420" font-size="36" font-family="sans-serif" text-anchor="middle" fill="#382F2A">Heitor + Livia</text>
+  <text x="600" y="470" font-size="24" font-family="sans-serif" text-anchor="middle" fill="#382F2A" opacity="0.6">Hero Image Placeholder</text>
+</svg>

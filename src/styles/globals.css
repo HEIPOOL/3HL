@@ -1,0 +1,150 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-warm-terracotta: #C77B5B;
+  --color-muted-teal: #6EA8A6;
+  --color-accent-glow: #FFD6A5;
+  
+  --color-bg: #FFF7EE;
+  --color-soft-cream: #FFF7EE;
+  --color-surface: #FFFFFF;
+  --color-text: #382F2A;
+  --color-deep-cocoa: #382F2A;
+  --color-muted: rgba(56, 47, 42, 0.6);
+  --color-glass: rgba(255, 255, 255, 0.7);
+  --color-glass-border: rgba(255, 255, 255, 0.5);
+  --color-card-shadow: rgba(0, 0, 0, 0.1);
+  
+  --asteroid-color: rgba(199, 123, 91, 0.12);
+  --asteroid-glow: rgba(255, 214, 165, 0.2);
+}
+
+.dark {
+  --color-bg: #0F1213;
+  --color-soft-cream: #0F1213;
+  --color-surface: #1A1D1E;
+  --color-text: #FFF7EE;
+  --color-deep-cocoa: #FFF7EE;
+  --color-muted: rgba(255, 247, 238, 0.6);
+  --color-glass: rgba(26, 29, 30, 0.8);
+  --color-glass-border: rgba(255, 255, 255, 0.1);
+  --color-card-shadow: rgba(0, 0, 0, 0.5);
+  
+  --asteroid-color: rgba(255, 214, 165, 0.15);
+  --asteroid-glow: rgba(199, 123, 91, 0.3);
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    font-family: var(--font-inter), 'Inter', system-ui, sans-serif;
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-poppins), 'Poppins', system-ui, sans-serif;
+  }
+
+  ::selection {
+    background-color: var(--color-warm-terracotta);
+    color: white;
+  }
+}
+
+@layer components {
+  .glass-card {
+    background-color: var(--color-glass);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border-radius: 16px;
+    box-shadow: 0 4px 20px var(--color-card-shadow);
+    border: 1px solid var(--color-glass-border);
+    transition: background-color 0.3s ease, border-color 0.3s ease;
+  }
+
+  .btn-primary {
+    @apply px-6 py-3 bg-warm-terracotta text-white rounded-full font-medium 
+           transition-all duration-200 hover:bg-warm-terracotta/90 
+           focus:outline-none focus:ring-2 focus:ring-warm-terracotta focus:ring-offset-2;
+  }
+
+  .btn-secondary {
+    @apply px-6 py-3 bg-transparent text-warm-terracotta border-2 border-warm-terracotta 
+           rounded-full font-medium transition-all duration-200 
+           hover:bg-warm-terracotta/10 focus:outline-none focus:ring-2 
+           focus:ring-warm-terracotta focus:ring-offset-2;
+  }
+
+  .text-gradient {
+    @apply bg-gradient-to-r from-warm-terracotta to-muted-teal bg-clip-text text-transparent;
+  }
+}
+
+@layer utilities {
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  .animate-fade-in {
+    animation: fadeIn 0.5s ease-out forwards;
+  }
+
+  .animate-slide-up {
+    animation: slideUp 0.5s ease-out forwards;
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+a:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--color-warm-terracotta);
+  outline-offset: 2px;
+}
+
+.dark a:focus-visible,
+.dark button:focus-visible {
+  outline-color: var(--color-accent-glow);
+}
