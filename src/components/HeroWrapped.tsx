@@ -13,12 +13,11 @@ export default function HeroWrapped({ user, partner, months }: HeroWrappedProps)
   const [soundEnabled, setSoundEnabled] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
-  const [isVideoLoaded, setIsVideoLoaded] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
   const videoContainerRef = useRef<HTMLDivElement>(null)
   const modalRef = useRef<HTMLDivElement>(null)
 
-  // Efeito para configurar o vídeo quando o modal abre
+  // Efeito para controlar o vídeo quando o modal abre
   useEffect(() => {
     if (showVideo && videoRef.current) {
       const video = videoRef.current
@@ -27,27 +26,30 @@ export default function HeroWrapped({ user, partner, months }: HeroWrappedProps)
       video.muted = !soundEnabled // Começa mudo ou não baseado no estado
       video.currentTime = 0
       
-      // Não tenta reproduzir automaticamente
-      setIsPlaying(false)
+      // Tenta iniciar a reprodução automaticamente
+      const playVideo = async () => {
+        try {
+          await video.play()
+          setIsPlaying(true)
+        } catch (error) {
+          console.log('Autoplay bloqueado, aguardando interação do usuário')
+          // O botão de play será mostrado automaticamente
+          setIsPlaying(false)
+        }
+      }
+      
+      playVideo()
       
       // Configura evento para quando o vídeo termina
       const handleEnded = () => {
         video.currentTime = 0
-        setIsPlaying(false)
+        video.play().catch(() => setIsPlaying(false))
       }
       
       video.addEventListener('ended', handleEnded)
       
-      // Configura evento quando o vídeo carrega
-      const handleLoaded = () => {
-        setIsVideoLoaded(true)
-      }
-      
-      video.addEventListener('loadeddata', handleLoaded)
-      
       return () => {
         video.removeEventListener('ended', handleEnded)
-        video.removeEventListener('loadeddata', handleLoaded)
       }
     }
   }, [showVideo, soundEnabled])
@@ -59,7 +61,6 @@ export default function HeroWrapped({ user, partner, months }: HeroWrappedProps)
     } else {
       document.body.style.overflow = 'unset'
       setIsPlaying(false)
-      setIsVideoLoaded(false)
     }
     
     return () => {
@@ -78,7 +79,7 @@ export default function HeroWrapped({ user, partner, months }: HeroWrappedProps)
       if (videoRef.current.paused) {
         // Primeiro, tenta habilitar o som se o usuário quiser
         if (!soundEnabled && videoRef.current.muted) {
-          // Tenta habilitar som
+          // Tenta habilitar som - alguns navegadores exigem interação para isso
           try {
             videoRef.current.muted = false
             await videoRef.current.play()
@@ -112,7 +113,6 @@ export default function HeroWrapped({ user, partner, months }: HeroWrappedProps)
     setShowVideo(false)
     setIsFullscreen(false)
     setIsPlaying(false)
-    setIsVideoLoaded(false)
   }
 
   const toggleSound = () => {
@@ -121,8 +121,10 @@ export default function HeroWrapped({ user, partner, months }: HeroWrappedProps)
       videoRef.current.muted = !newSoundState
       setSoundEnabled(newSoundState)
       
-      // Se o vídeo estiver pausado e o usuário ativar o som, NÃO inicia automaticamente
-      // Aguarda o usuário clicar no botão de play
+      // Se o vídeo estiver pausado e o usuário ativar o som, inicia a reprodução
+      if (newSoundState && videoRef.current.paused) {
+        videoRef.current.play().then(() => setIsPlaying(true)).catch(console.error)
+      }
     }
   }
 
@@ -326,6 +328,7 @@ export default function HeroWrapped({ user, partner, months }: HeroWrappedProps)
                   relative flex-1 flex items-center justify-center bg-black
                   ${!isFullscreen ? 'max-h-[calc(90vh-80px)]' : ''}
                 `}
+                onClick={handleVideoPlay}
               >
                 <video
                   ref={videoRef}
@@ -336,38 +339,28 @@ export default function HeroWrapped({ user, partner, months }: HeroWrappedProps)
                   preload="auto"
                   onPlay={() => setIsPlaying(true)}
                   onPause={() => setIsPlaying(false)}
-                  onLoadedData={() => setIsVideoLoaded(true)}
                 />
                 
-                {/* Botão de play overlay - sempre aparece inicialmente, some quando o vídeo está tocando */}
-                {(!isPlaying || !isVideoLoaded) && (
+                {/* Botão de play overlay - aparece se o vídeo não está tocando */}
+                {!isPlaying && (
                   <div className="absolute inset-0 flex items-center justify-center bg-black/40">
                     <button
                       onClick={handleVideoPlay}
                       className="p-4 rounded-full transition-transform active:scale-95"
                       aria-label="Tocar vídeo"
                     >
-                      {!isVideoLoaded ? (
-                        <div className="text-center">
-                          <div className="w-12 h-12 border-3 border-white/30 border-t-white rounded-full animate-spin mx-auto mb-4"></div>
-                          <p className="text-white text-sm">Carregando vídeo...</p>
-                        </div>
-                      ) : (
-                        <>
-                          <div className="w-16 h-16 md:w-20 md:h-20 bg-warm-terracotta/80 rounded-full flex items-center justify-center animate-pulse">
-                            <svg className="w-8 h-8 md:w-10 md:h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                            </svg>
-                          </div>
-                          <p className="text-white text-sm mt-2">Toque para iniciar</p>
-                        </>
-                      )}
+                      <div className="w-16 h-16 md:w-20 md:h-20 bg-warm-terracotta/80 rounded-full flex items-center justify-center animate-pulse">
+                        <svg className="w-8 h-8 md:w-10 md:h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                        </svg>
+                      </div>
+                      <p className="text-white text-sm mt-2">Toque para iniciar</p>
                     </button>
                   </div>
                 )}
                 
                 {/* Overlay de controles para tela cheia */}
-                {isFullscreen && isVideoLoaded && (
+                {isFullscreen && (
                   <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex items-center gap-2 md:gap-4 bg-black/80 backdrop-blur-sm px-3 md:px-4 py-1.5 md:py-2 rounded-full">
                     <button
                       onClick={(e) => {
@@ -411,9 +404,7 @@ export default function HeroWrapped({ user, partner, months }: HeroWrappedProps)
                         e.stopPropagation()
                         if (videoRef.current) {
                           videoRef.current.currentTime = 0
-                          if (isPlaying) {
-                            videoRef.current.play().then(() => setIsPlaying(true)).catch(console.error)
-                          }
+                          videoRef.current.play().then(() => setIsPlaying(true)).catch(console.error)
                         }
                       }}
                       className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/20 text-white hover:bg-white/30 transition-all active:scale-95"
@@ -428,7 +419,7 @@ export default function HeroWrapped({ user, partner, months }: HeroWrappedProps)
               </div>
 
               {/* Controles inferiores (modo normal) */}
-              {!isFullscreen && isVideoLoaded && (
+              {!isFullscreen && (
                 <div className="border-t border-deep-cocoa/10 p-3 md:p-4">
                   <div className="flex flex-col md:flex-row items-center justify-between gap-3">
                     <div className="w-full md:w-auto">
@@ -457,7 +448,7 @@ export default function HeroWrapped({ user, partner, months }: HeroWrappedProps)
 
                     <div className="flex items-center justify-between w-full md:w-auto gap-2 md:gap-4">
                       <div className="flex items-center gap-2 text-sm text-deep-cocoa/60">
-                        <span className="text-xs md:text-sm">Toque no botão play para iniciar</span>
+                        <span className="text-xs md:text-sm">Toque no vídeo para controlar</span>
                       </div>
                       
                       <button
