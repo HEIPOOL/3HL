@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef } from 'react'
 import { motion } from 'framer-motion'
 import { Track } from '@/types'
 import Card from './Shared/Card'
@@ -11,89 +11,58 @@ interface TopTracksCardProps {
 export default function TopTracksCard({ tracks }: TopTracksCardProps) {
   const [playingTrack, setPlayingTrack] = useState<number | null>(null)
   const [audioError, setAudioError] = useState<number | null>(null)
-  const [audioLoaded, setAudioLoaded] = useState<boolean[]>(Array(tracks.length).fill(false))
-  const audioRefs = useRef<HTMLAudioElement[]>([])
+  const audioRef = useRef<HTMLAudioElement | null>(null)
 
-  // Inicializa os elementos de áudio
-  useEffect(() => {
-    audioRefs.current = tracks.map((_, index) => {
-      const audio = new Audio()
-      audio.preload = 'metadata'
-      audio.volume = 0.5
-      
-      audio.addEventListener('loadeddata', () => {
-        const newAudioLoaded = [...audioLoaded]
-        newAudioLoaded[index] = true
-        setAudioLoaded(newAudioLoaded)
-      })
-      
-      audio.addEventListener('error', () => {
-        const newAudioLoaded = [...audioLoaded]
-        newAudioLoaded[index] = false
-        setAudioLoaded(newAudioLoaded)
-        setAudioError(tracks[index].rank)
-      })
-      
-      return audio
-    })
-
-    return () => {
-      // Limpa todos os áudios ao desmontar
-      audioRefs.current.forEach(audio => {
-        audio.pause()
-        audio.src = ''
-        audio.load()
-      })
+  const handlePlay = (rank: number, preview: string) => {
+    // Verifica se é um placeholder ou URL inválida
+    if (!preview || preview.includes('placeholder') || preview.trim() === '') {
+      setAudioError(rank)
+      return
     }
-  }, [tracks])
 
-  const handlePlay = async (rank: number, preview: string) => {
-    const trackIndex = tracks.findIndex(t => t.rank === rank)
-    
     if (playingTrack === rank) {
-      // Pausar a faixa atual
-      audioRefs.current[trackIndex]?.pause()
+      audioRef.current?.pause()
       setPlayingTrack(null)
       return
     }
 
-    // Pausar qualquer faixa que esteja tocando
-    if (playingTrack !== null) {
-      const previousIndex = tracks.findIndex(t => t.rank === playingTrack)
-      audioRefs.current[previousIndex]?.pause()
+    if (audioRef.current) {
+      audioRef.current.pause()
     }
 
-    // Tentar tocar a nova faixa
+    // Tenta criar o áudio
     try {
-      const audio = audioRefs.current[trackIndex]
-      if (!audio) {
-        throw new Error('Áudio não encontrado')
-      }
+      const audio = new Audio(preview)
+      audio.volume = 0.5
+      audioRef.current = audio
 
-      // Se já tiver src configurado, usar, senão configurar
-      if (!audio.src || audio.src !== preview) {
-        audio.src = preview
-      }
+      audio.play().then(() => {
+        setPlayingTrack(rank)
+        setAudioError(null)
+      }).catch((error) => {
+        console.error('Erro ao reproduzir áudio:', error)
+        setAudioError(rank)
+        setPlayingTrack(null)
+      })
 
-      await audio.play()
-      setPlayingTrack(rank)
-      setAudioError(null)
-
-      // Configurar evento de término
-      audio.onended = () => {
+      audio.onended = () => setPlayingTrack(null)
+      audio.onerror = () => {
+        setAudioError(rank)
         setPlayingTrack(null)
       }
-
     } catch (error) {
-      console.error('Erro ao reproduzir áudio:', error)
+      console.error('Erro ao criar áudio:', error)
       setAudioError(rank)
       setPlayingTrack(null)
-      
-      // Se for erro de autoplay, mostrar mensagem
-      if (error instanceof Error && error.name === 'NotAllowedError') {
-        alert('Clique novamente para reproduzir a prévia. Alguns navegadores requerem interação direta com o botão de play.')
-      }
     }
+  }
+
+  // Verifica se a URL do preview é válida
+  const isValidAudioUrl = (url: string) => {
+    if (!url || url.trim() === '') return false
+    if (url.includes('placeholder')) return false
+    if (!url.startsWith('http') && !url.startsWith('/audio/')) return false
+    return true
   }
 
   const maxPlays = Math.max(...tracks.map(t => t.plays))
@@ -118,8 +87,8 @@ export default function TopTracksCard({ tracks }: TopTracksCardProps) {
 
           <div className="order-1 md:order-2 space-y-3">
             {tracks.map((track, index) => {
+              const hasValidAudio = isValidAudioUrl(track.preview)
               const isPlaying = playingTrack === track.rank
-              const hasPreview = track.preview && track.preview.trim() !== ''
               
               return (
                 <motion.div
@@ -128,7 +97,7 @@ export default function TopTracksCard({ tracks }: TopTracksCardProps) {
                   whileInView={{ opacity: 1, x: 0 }}
                   viewport={{ once: true }}
                   transition={{ delay: index * 0.1 }}
-                  className={`flex items-center gap-4 p-3 rounded-xl transition-colors group ${
+                  className={`flex items-center gap-4 p-3 rounded-xl transition-colors ${
                     isPlaying 
                       ? 'bg-warm-terracotta/10 border border-warm-terracotta/20' 
                       : 'bg-white/50 hover:bg-white/80'
@@ -157,15 +126,17 @@ export default function TopTracksCard({ tracks }: TopTracksCardProps) {
                       <p className="text-xs text-deep-cocoa/50 mt-1">{track.plays} plays</p>
                     </div>
 
-                    {hasPreview ? (
+                    {hasValidAudio ? (
                       <button
                         onClick={() => handlePlay(track.rank, track.preview)}
                         disabled={audioError === track.rank}
-                        className={`p-2 rounded-full transition-all active:scale-95 ${
+                        className={`p-2 rounded-full transition-colors ${
                           isPlaying 
                             ? 'bg-warm-terracotta text-white animate-pulse' 
-                            : 'bg-deep-cocoa/10 text-deep-cocoa hover:bg-warm-terracotta/20'
-                        } ${audioError === track.rank ? 'opacity-50 cursor-not-allowed' : ''}`}
+                            : audioError === track.rank
+                              ? 'bg-deep-cocoa/5 text-deep-cocoa/30 cursor-not-allowed'
+                              : 'bg-deep-cocoa/10 text-deep-cocoa hover:bg-warm-terracotta/20'
+                        }`}
                         aria-label={isPlaying ? `Pausar ${track.title}` : `Tocar ${track.title}`}
                       >
                         {isPlaying ? (
@@ -185,9 +156,9 @@ export default function TopTracksCard({ tracks }: TopTracksCardProps) {
                     ) : (
                       <button
                         disabled
-                        className="p-2 rounded-full bg-deep-cocoa/10 text-deep-cocoa/40 cursor-not-allowed"
+                        className="p-2 rounded-full bg-deep-cocoa/5 text-deep-cocoa/30 cursor-not-allowed"
                         aria-label="Prévia indisponível"
-                        title="Prévia indisponível"
+                        title="Prévia indisponível - Adicione um arquivo de áudio em /public/audio/"
                       >
                         <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
                           <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 5-5v10zm2 0V7l5 5-5 5z" />
@@ -201,20 +172,22 @@ export default function TopTracksCard({ tracks }: TopTracksCardProps) {
 
             {audioError && (
               <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
                 className="text-sm text-warm-terracotta text-center mt-4 p-3 bg-warm-terracotta/10 rounded-lg"
               >
-                <p>Algumas prévias podem não estar disponíveis.</p>
+                <p>⚠️ Algumas prévias podem não estar disponíveis.</p>
                 <p className="text-xs mt-1 text-deep-cocoa/60">
-                  Certifique-se de que os arquivos de áudio estão em /public/audio/ ou use URLs válidas
+                  Para ouvir as músicas, adicione arquivos de áudio em /public/audio/ e atualize as URLs nas músicas.
                 </p>
               </motion.div>
             )}
 
-            <div className="text-xs text-deep-cocoa/40 text-center mt-4">
-              <p>Dica: Clique em qualquer música para ouvir a prévia (30s)</p>
-              <p className="mt-1">Os áudios são carregados sob demanda para melhor performance</p>
+            <div className="text-xs text-deep-cocoa/40 text-center mt-4 p-2 bg-deep-cocoa/5 rounded">
+              <p>🎵 <strong>Para adicionar músicas reais:</strong></p>
+              <p className="mt-1">1. Coloque arquivos .mp3 em /public/audio/</p>
+              <p>2. Atualize as URLs no arquivo de dados das músicas</p>
+              <p>Exemplo: preview: "/audio/nome-da-musica.mp3"</p>
             </div>
           </div>
         </div>
