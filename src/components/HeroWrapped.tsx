@@ -13,51 +13,51 @@ export default function HeroWrapped({ user, partner, months }: HeroWrappedProps)
   const [soundEnabled, setSoundEnabled] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
-  const [videoLoaded, setVideoLoaded] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
   const videoContainerRef = useRef<HTMLDivElement>(null)
   const modalRef = useRef<HTMLDivElement>(null)
 
-  // Pré-carrega o vídeo quando o componente monta
+  // Efeito para controlar o vídeo quando o modal abre
   useEffect(() => {
-    if (!videoRef.current) return
-    
-    const video = videoRef.current
-    video.preload = 'auto'
-    video.load()
-    
-    const handleLoaded = () => {
-      setVideoLoaded(true)
+    if (showVideo && videoRef.current) {
+      const video = videoRef.current
+      
+      // Configurações iniciais do vídeo
+      video.muted = !soundEnabled // Começa mudo ou não baseado no estado
+      video.currentTime = 0
+      
+      // Tenta iniciar a reprodução automaticamente
+      const playVideo = async () => {
+        try {
+          await video.play()
+          setIsPlaying(true)
+        } catch (error) {
+          console.log('Autoplay bloqueado, aguardando interação do usuário')
+          // O botão de play será mostrado automaticamente
+          setIsPlaying(false)
+        }
+      }
+      
+      playVideo()
+      
+      // Configura evento para quando o vídeo termina
+      const handleEnded = () => {
+        video.currentTime = 0
+        video.play().catch(() => setIsPlaying(false))
+      }
+      
+      video.addEventListener('ended', handleEnded)
+      
+      return () => {
+        video.removeEventListener('ended', handleEnded)
+      }
     }
-    
-    video.addEventListener('loadeddata', handleLoaded)
-    
-    return () => {
-      video.removeEventListener('loadeddata', handleLoaded)
-    }
-  }, [])
+  }, [showVideo, soundEnabled])
 
   // Bloqueia scroll quando modal está aberto
   useEffect(() => {
     if (showVideo) {
       document.body.style.overflow = 'hidden'
-      // Tenta iniciar o vídeo quando o modal abre
-      setTimeout(() => {
-        if (videoRef.current && !videoRef.current.paused) return
-        
-        const playPromise = videoRef.current?.play()
-        if (playPromise !== undefined) {
-          playPromise
-            .then(() => {
-              setIsPlaying(true)
-              console.log('Vídeo iniciado automaticamente')
-            })
-            .catch(error => {
-              console.log('Autoplay bloqueado:', error)
-              // Mostra o botão de play para interação do usuário
-            })
-        }
-      }, 100)
     } else {
       document.body.style.overflow = 'unset'
       setIsPlaying(false)
@@ -72,32 +72,27 @@ export default function HeroWrapped({ user, partner, months }: HeroWrappedProps)
     setShowVideo(true)
   }
 
-  const handleUserPlay = async () => {
+  const handleVideoPlay = async () => {
     if (!videoRef.current) return
     
     try {
       if (videoRef.current.paused) {
-        await videoRef.current.play()
-        setIsPlaying(true)
-        console.log('Vídeo iniciado por interação do usuário')
-        
-        // Se for a primeira interação e o som estava desabilitado, tenta ativar
-        if (!soundEnabled) {
-          // Tenta habilitar som após interação do usuário
-          videoRef.current.muted = false
-          const playWithSound = videoRef.current.play()
-          if (playWithSound !== undefined) {
-            playWithSound
-              .then(() => {
-                setSoundEnabled(true)
-                console.log('Som ativado após interação')
-              })
-              .catch(() => {
-                // Mantém mudo se não conseguir
-                videoRef.current!.muted = true
-              })
+        // Primeiro, tenta habilitar o som se o usuário quiser
+        if (!soundEnabled && videoRef.current.muted) {
+          // Tenta habilitar som - alguns navegadores exigem interação para isso
+          try {
+            videoRef.current.muted = false
+            await videoRef.current.play()
+            setSoundEnabled(true)
+          } catch {
+            // Se falhar, tenta tocar mudo
+            videoRef.current.muted = true
+            await videoRef.current.play()
           }
+        } else {
+          await videoRef.current.play()
         }
+        setIsPlaying(true)
       } else {
         videoRef.current.pause()
         setIsPlaying(false)
@@ -114,24 +109,22 @@ export default function HeroWrapped({ user, partner, months }: HeroWrappedProps)
     if (videoRef.current) {
       videoRef.current.pause()
       videoRef.current.currentTime = 0
-      setIsPlaying(false)
     }
     setShowVideo(false)
     setIsFullscreen(false)
+    setIsPlaying(false)
   }
 
   const toggleSound = () => {
-    if (!videoRef.current) return
-    
-    const newSoundState = !soundEnabled
-    videoRef.current.muted = !newSoundState
-    setSoundEnabled(newSoundState)
-    
-    // Se estiver ativando o som e o vídeo não está tocando, inicia
-    if (newSoundState && videoRef.current.paused) {
-      videoRef.current.play()
-        .then(() => setIsPlaying(true))
-        .catch(console.error)
+    if (videoRef.current) {
+      const newSoundState = !soundEnabled
+      videoRef.current.muted = !newSoundState
+      setSoundEnabled(newSoundState)
+      
+      // Se o vídeo estiver pausado e o usuário ativar o som, inicia a reprodução
+      if (newSoundState && videoRef.current.paused) {
+        videoRef.current.play().then(() => setIsPlaying(true)).catch(console.error)
+      }
     }
   }
 
@@ -152,8 +145,7 @@ export default function HeroWrapped({ user, partner, months }: HeroWrappedProps)
   }
 
   const handleFullscreenChange = () => {
-    const fullscreenElement = document.fullscreenElement
-    setIsFullscreen(!!fullscreenElement)
+    setIsFullscreen(!!document.fullscreenElement)
   }
 
   useEffect(() => {
@@ -336,34 +328,24 @@ export default function HeroWrapped({ user, partner, months }: HeroWrappedProps)
                   relative flex-1 flex items-center justify-center bg-black
                   ${!isFullscreen ? 'max-h-[calc(90vh-80px)]' : ''}
                 `}
-                onClick={handleUserPlay}
+                onClick={handleVideoPlay}
               >
-                {/* Elemento de vídeo - sempre presente mas oculto até carregar */}
                 <video
                   ref={videoRef}
                   className="w-full h-full object-contain"
                   src="/images/videos/hero.mp4"
                   loop
-                  muted={!soundEnabled}
                   playsInline
-                  controls={false}
                   preload="auto"
                   onPlay={() => setIsPlaying(true)}
                   onPause={() => setIsPlaying(false)}
-                  onLoadedData={() => setVideoLoaded(true)}
-                  onEnded={() => {
-                    if (videoRef.current) {
-                      videoRef.current.currentTime = 0
-                      videoRef.current.play()
-                    }
-                  }}
                 />
                 
                 {/* Botão de play overlay - aparece se o vídeo não está tocando */}
                 {!isPlaying && (
                   <div className="absolute inset-0 flex items-center justify-center bg-black/40">
                     <button
-                      onClick={handleUserPlay}
+                      onClick={handleVideoPlay}
                       className="p-4 rounded-full transition-transform active:scale-95"
                       aria-label="Tocar vídeo"
                     >
@@ -383,7 +365,7 @@ export default function HeroWrapped({ user, partner, months }: HeroWrappedProps)
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
-                        handleUserPlay()
+                        handleVideoPlay()
                       }}
                       className="flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 rounded-full bg-white/20 text-white hover:bg-white/30 transition-all active:scale-95"
                     >
@@ -422,7 +404,7 @@ export default function HeroWrapped({ user, partner, months }: HeroWrappedProps)
                         e.stopPropagation()
                         if (videoRef.current) {
                           videoRef.current.currentTime = 0
-                          videoRef.current.play()
+                          videoRef.current.play().then(() => setIsPlaying(true)).catch(console.error)
                         }
                       }}
                       className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/20 text-white hover:bg-white/30 transition-all active:scale-95"
