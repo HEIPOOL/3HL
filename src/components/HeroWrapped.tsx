@@ -13,54 +13,112 @@ export default function HeroWrapped({ user, partner, months }: HeroWrappedProps)
   const [soundEnabled, setSoundEnabled] = useState(false)
   const [isFullscreen, setIsFullscreen] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
-  const [videoLoaded, setVideoLoaded] = useState(false)
+  const [videoError, setVideoError] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
   const videoRef = useRef<HTMLVideoElement>(null)
   const videoContainerRef = useRef<HTMLDivElement>(null)
   const modalRef = useRef<HTMLDivElement>(null)
 
-  // Pré-carrega o vídeo quando o componente monta
+  // URL base para assets - funciona em local e Vercel
+  const videoUrl = '/images/videos/hero.mp4'
+
+  // Verifica se o vídeo existe
+  const checkVideoExists = async () => {
+    try {
+      const response = await fetch(videoUrl, { method: 'HEAD' })
+      return response.ok
+    } catch (error) {
+      console.warn('Vídeo não encontrado:', videoUrl)
+      return false
+    }
+  }
+
+  // Efeito para controlar o vídeo quando o modal abre
   useEffect(() => {
-    if (!videoRef.current) return
-    
-    const video = videoRef.current
-    video.preload = 'auto'
-    video.load()
-    
-    const handleLoaded = () => {
-      setVideoLoaded(true)
+    if (showVideo && videoRef.current) {
+      const video = videoRef.current
+      
+      // Configurações iniciais do vídeo
+      video.muted = !soundEnabled
+      video.currentTime = 0
+      setIsLoading(true)
+      setVideoError(false)
+      
+      // Tenta carregar e reproduzir o vídeo
+      const loadAndPlayVideo = async () => {
+        try {
+          // Força o carregamento
+          video.load()
+          
+          await new Promise((resolve, reject) => {
+            const onCanPlay = () => {
+              video.removeEventListener('canplay', onCanPlay)
+              video.removeEventListener('error', onError)
+              resolve(true)
+            }
+            
+            const onError = () => {
+              video.removeEventListener('canplay', onCanPlay)
+              video.removeEventListener('error', onError)
+              reject(new Error('Erro ao carregar vídeo'))
+            }
+            
+            video.addEventListener('canplay', onCanPlay)
+            video.addEventListener('error', onError)
+            
+            // Timeout após 5 segundos
+            setTimeout(() => {
+              video.removeEventListener('canplay', onCanPlay)
+              video.removeEventListener('error', onError)
+              reject(new Error('Timeout ao carregar vídeo'))
+            }, 5000)
+          })
+          
+          // Tenta iniciar a reprodução
+          await video.play()
+          setIsPlaying(true)
+          setIsLoading(false)
+          
+        } catch (error) {
+          console.log('Erro ao carregar/reproduzir vídeo:', error)
+          setIsLoading(false)
+          
+          // Se for autoplay bloqueado, apenas mostra o botão de play
+          if (error instanceof Error && error.name === 'NotAllowedError') {
+            // Apenas mostra o botão de play - não marca como erro
+          } else {
+            setVideoError(true)
+          }
+        }
+      }
+      
+      loadAndPlayVideo()
+      
+      // Configura evento para quando o vídeo termina
+      const handleEnded = () => {
+        if (video) {
+          video.currentTime = 0
+          video.play().catch(() => setIsPlaying(false))
+        }
+      }
+      
+      video.addEventListener('ended', handleEnded)
+      
+      return () => {
+        video.removeEventListener('ended', handleEnded)
+      }
     }
-    
-    video.addEventListener('loadeddata', handleLoaded)
-    
-    return () => {
-      video.removeEventListener('loadeddata', handleLoaded)
-    }
-  }, [])
+  }, [showVideo, soundEnabled])
 
   // Bloqueia scroll quando modal está aberto
   useEffect(() => {
     if (showVideo) {
       document.body.style.overflow = 'hidden'
-      // Tenta iniciar o vídeo quando o modal abre
-      setTimeout(() => {
-        if (videoRef.current && !videoRef.current.paused) return
-        
-        const playPromise = videoRef.current?.play()
-        if (playPromise !== undefined) {
-          playPromise
-            .then(() => {
-              setIsPlaying(true)
-              console.log('Vídeo iniciado automaticamente')
-            })
-            .catch(error => {
-              console.log('Autoplay bloqueado:', error)
-              // Mostra o botão de play para interação do usuário
-            })
-        }
-      }, 100)
     } else {
       document.body.style.overflow = 'unset'
       setIsPlaying(false)
+      setIsLoading(false)
+      setVideoError(false)
     }
     
     return () => {
@@ -72,30 +130,26 @@ export default function HeroWrapped({ user, partner, months }: HeroWrappedProps)
     setShowVideo(true)
   }
 
-  const handleUserPlay = async () => {
+  const handleVideoPlay = async () => {
     if (!videoRef.current) return
     
     try {
       if (videoRef.current.paused) {
+        // Tenta reproduzir com interação do usuário
         await videoRef.current.play()
         setIsPlaying(true)
-        console.log('Vídeo iniciado por interação do usuário')
+        setVideoError(false)
+        setIsLoading(false)
         
-        // Se for a primeira interação e o som estava desabilitado, tenta ativar
+        // Se o som estava desativado e o usuário clicou, tenta ativar
         if (!soundEnabled) {
-          // Tenta habilitar som após interação do usuário
-          videoRef.current.muted = false
-          const playWithSound = videoRef.current.play()
-          if (playWithSound !== undefined) {
-            playWithSound
-              .then(() => {
-                setSoundEnabled(true)
-                console.log('Som ativado após interação')
-              })
-              .catch(() => {
-                // Mantém mudo se não conseguir
-                videoRef.current!.muted = true
-              })
+          try {
+            videoRef.current.muted = false
+            await videoRef.current.play()
+            setSoundEnabled(true)
+          } catch {
+            // Mantém mudo se não conseguir
+            videoRef.current.muted = true
           }
         }
       } else {
@@ -104,6 +158,7 @@ export default function HeroWrapped({ user, partner, months }: HeroWrappedProps)
       }
     } catch (error) {
       console.error('Erro ao controlar vídeo:', error)
+      setVideoError(true)
     }
   }
 
@@ -114,24 +169,26 @@ export default function HeroWrapped({ user, partner, months }: HeroWrappedProps)
     if (videoRef.current) {
       videoRef.current.pause()
       videoRef.current.currentTime = 0
-      setIsPlaying(false)
     }
     setShowVideo(false)
     setIsFullscreen(false)
+    setIsPlaying(false)
+    setIsLoading(false)
+    setVideoError(false)
   }
 
   const toggleSound = () => {
-    if (!videoRef.current) return
-    
-    const newSoundState = !soundEnabled
-    videoRef.current.muted = !newSoundState
-    setSoundEnabled(newSoundState)
-    
-    // Se estiver ativando o som e o vídeo não está tocando, inicia
-    if (newSoundState && videoRef.current.paused) {
-      videoRef.current.play()
-        .then(() => setIsPlaying(true))
-        .catch(console.error)
+    if (videoRef.current) {
+      const newSoundState = !soundEnabled
+      videoRef.current.muted = !newSoundState
+      setSoundEnabled(newSoundState)
+      
+      // Se ativou o som e o vídeo está pausado, tenta reproduzir
+      if (newSoundState && videoRef.current.paused) {
+        videoRef.current.play()
+          .then(() => setIsPlaying(true))
+          .catch(console.error)
+      }
     }
   }
 
@@ -152,8 +209,7 @@ export default function HeroWrapped({ user, partner, months }: HeroWrappedProps)
   }
 
   const handleFullscreenChange = () => {
-    const fullscreenElement = document.fullscreenElement
-    setIsFullscreen(!!fullscreenElement)
+    setIsFullscreen(!!document.fullscreenElement)
   }
 
   useEffect(() => {
@@ -336,54 +392,78 @@ export default function HeroWrapped({ user, partner, months }: HeroWrappedProps)
                   relative flex-1 flex items-center justify-center bg-black
                   ${!isFullscreen ? 'max-h-[calc(90vh-80px)]' : ''}
                 `}
-                onClick={handleUserPlay}
+                onClick={handleVideoPlay}
               >
-                {/* Elemento de vídeo - sempre presente mas oculto até carregar */}
-                <video
-                  ref={videoRef}
-                  className="w-full h-full object-contain"
-                  src="/images/videos/hero.mp4"
-                  loop
-                  muted={!soundEnabled}
-                  playsInline
-                  controls={false}
-                  preload="auto"
-                  onPlay={() => setIsPlaying(true)}
-                  onPause={() => setIsPlaying(false)}
-                  onLoadedData={() => setVideoLoaded(true)}
-                  onEnded={() => {
-                    if (videoRef.current) {
-                      videoRef.current.currentTime = 0
-                      videoRef.current.play()
-                    }
-                  }}
-                />
-                
-                {/* Botão de play overlay - aparece se o vídeo não está tocando */}
-                {!isPlaying && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-black/40">
-                    <button
-                      onClick={handleUserPlay}
-                      className="p-4 rounded-full transition-transform active:scale-95"
-                      aria-label="Tocar vídeo"
-                    >
-                      <div className="w-16 h-16 md:w-20 md:h-20 bg-warm-terracotta/80 rounded-full flex items-center justify-center animate-pulse">
-                        <svg className="w-8 h-8 md:w-10 md:h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                {isLoading ? (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black">
+                    <div className="text-center">
+                      <div className="w-12 h-12 border-3 border-warm-terracotta/30 border-t-warm-terracotta rounded-full animate-spin mx-auto mb-4"></div>
+                      <p className="text-white">Carregando vídeo...</p>
+                    </div>
+                  </div>
+                ) : videoError ? (
+                  <div className="absolute inset-0 flex items-center justify-center bg-black">
+                    <div className="text-center p-6">
+                      <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                       </div>
-                      <p className="text-white text-sm mt-2">Toque para iniciar</p>
-                    </button>
+                      <p className="text-white text-lg mb-2">Erro ao carregar vídeo</p>
+                      <p className="text-white/70 text-sm mb-4">
+                        Verifique se o arquivo <code>hero.mp4</code> está em <code>public/images/videos/</code>
+                      </p>
+                      <button
+                        onClick={handleVideoPlay}
+                        className="px-4 py-2 bg-warm-terracotta text-white rounded-lg hover:bg-warm-terracotta/80 transition-colors"
+                      >
+                        Tentar novamente
+                      </button>
+                    </div>
                   </div>
+                ) : (
+                  <>
+                    <video
+                      ref={videoRef}
+                      className="w-full h-full object-contain"
+                      src={videoUrl}
+                      loop
+                      playsInline
+                      preload="auto"
+                      onPlay={() => setIsPlaying(true)}
+                      onPause={() => setIsPlaying(false)}
+                      onError={() => setVideoError(true)}
+                      onLoadStart={() => setIsLoading(true)}
+                      onCanPlay={() => setIsLoading(false)}
+                    />
+                    
+                    {/* Botão de play overlay - aparece se o vídeo não está tocando */}
+                    {!isPlaying && !isLoading && (
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+                        <button
+                          onClick={handleVideoPlay}
+                          className="p-4 rounded-full transition-transform active:scale-95"
+                          aria-label="Tocar vídeo"
+                        >
+                          <div className="w-16 h-16 md:w-20 md:h-20 bg-warm-terracotta/80 rounded-full flex items-center justify-center animate-pulse">
+                            <svg className="w-8 h-8 md:w-10 md:h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                            </svg>
+                          </div>
+                          <p className="text-white text-sm mt-2">Toque para iniciar</p>
+                        </button>
+                      </div>
+                    )}
+                  </>
                 )}
                 
                 {/* Overlay de controles para tela cheia */}
-                {isFullscreen && (
+                {isFullscreen && !isLoading && !videoError && (
                   <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex items-center gap-2 md:gap-4 bg-black/80 backdrop-blur-sm px-3 md:px-4 py-1.5 md:py-2 rounded-full">
                     <button
                       onClick={(e) => {
                         e.stopPropagation()
-                        handleUserPlay()
+                        handleVideoPlay()
                       }}
                       className="flex items-center gap-1 md:gap-2 px-2 md:px-3 py-1 md:py-1.5 rounded-full bg-white/20 text-white hover:bg-white/30 transition-all active:scale-95"
                     >
@@ -416,28 +496,12 @@ export default function HeroWrapped({ user, partner, months }: HeroWrappedProps)
                       </svg>
                       <span className="text-xs md:text-sm">{soundEnabled ? 'Som ON' : 'Som OFF'}</span>
                     </button>
-                    
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        if (videoRef.current) {
-                          videoRef.current.currentTime = 0
-                          videoRef.current.play()
-                        }
-                      }}
-                      className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/20 text-white hover:bg-white/30 transition-all active:scale-95"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                      </svg>
-                      <span className="text-sm">Reiniciar</span>
-                    </button>
                   </div>
                 )}
               </div>
 
               {/* Controles inferiores (modo normal) */}
-              {!isFullscreen && (
+              {!isFullscreen && !isLoading && !videoError && (
                 <div className="border-t border-deep-cocoa/10 p-3 md:p-4">
                   <div className="flex flex-col md:flex-row items-center justify-between gap-3">
                     <div className="w-full md:w-auto">
@@ -496,6 +560,4 @@ export default function HeroWrapped({ user, partner, months }: HeroWrappedProps)
       </div>
     </section>
   )
-
 }
-
