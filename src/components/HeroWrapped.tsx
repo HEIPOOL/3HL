@@ -342,7 +342,7 @@ export default function HeroWrapped({ user, partner, months }: HeroWrappedProps)
                 <video
                   ref={videoRef}
                   className="w-full h-full object-contain"
-                  src="/images/videos/hero.mp4"
+                  src="public/images/videos/hero.mp4"
                   loop
                   muted={!soundEnabled}
                   playsInline
@@ -496,4 +496,5 @@ export default function HeroWrapped({ user, partner, months }: HeroWrappedProps)
       </div>
     </section>
   )
+
 }
